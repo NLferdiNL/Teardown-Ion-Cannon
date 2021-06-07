@@ -25,7 +25,7 @@ function rndVec(length)
 	return VecScale(v, length)	
 end
 
-function dirVec(a, b)
+function VecDir(a, b)
 	return VecNormalize(VecSub(b, a))
 end
 
