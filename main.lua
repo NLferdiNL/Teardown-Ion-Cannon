@@ -7,13 +7,22 @@ local beaconClass = {
 	active = false,
 	evaTicker = 0,
 	transform = nil,
+	beepTimer = 0,
 	timer = 30,
 	streaks = {},
+	warmupSndTriggered = false,
+}
+
+local explosionClass = {
+	transform = nil,
+	maxSize = 50,
+	lifetime = 0,
+	maxLifetime = 0.5,
 }
 
 -- TODO: Following variables to options.
 
-local range = 30 -- Centered around player.
+local range = 30 -- Centered around beacon.
 local explosions = 4 -- Amount of explosions divided between range.
 local explosionsUp = 5
 
@@ -22,6 +31,7 @@ local circleSize = 75
 -- END OPTION VARS
 
 local currentBeacon = nil
+local currentExplosionWave = nil
 
 local placingBeacon = false
 local toolDown = false
@@ -31,9 +41,12 @@ local currentPlacementTime = 0
 
 local beaconSprite = nil
 local circleSprite = nil
+local sphereSprite = nil
 local lineSprite = nil
 
 local beepSound = nil
+local warmupSound = nil
+local fireSound = nil
 
 -- TODO: Clean up number sounds
 local evaBeaconDeployedSound = "snd/ion_cannon_beacon_deployed.ogg"
@@ -66,9 +79,12 @@ function init()
 	
 	beaconSprite = LoadSprite("sprites/beacon.png")
 	circleSprite = LoadSprite("sprites/circle.png")
+	sphereSprite = LoadSprite("sprites/sphere.png")
 	lineSprite = LoadSprite("sprites/line.png")
 	
 	beepSound = LoadSound("snd/com_ion_beep.ogg")
+	warmupSound = LoadSound("snd/ion_warmup.ogg")
+	fireSound = LoadSound("snd/ion_fire.ogg")
 end
 
 function tick(dt)
@@ -79,9 +95,15 @@ function tick(dt)
 	
 	drawBeaconAnim(dt, currentBeacon)
 	
-	beaconTimerLogic(dt, currentBeacon)
+	if beaconTimerLogic(dt, currentBeacon) then
+		currentBeacon = nil
+	end
 	
 	beaconSoundHandler(dt, currentBeacon)
+	
+	if explosionWaveHandler(dt, currentExplosionWave) then
+		currentExplosionWave = nil
+	end
 end
 
 function draw(dt)	
@@ -142,14 +164,19 @@ function beaconTimerLogic(dt, beacon)
 	if beacon.timer <= 0 then
 		explodeBeacon(beacon)
 		beacon.active = false
-		currentBeacon = nil --TODO: Wipe this beacon from array.
+		return true
 	end
+	
+	return false
 end
 
 function explodeBeacon(beacon)
 	if beacon == nil or beacon.active == false then
 		return
 	end
+	
+	PlaySound(fireSound, beacon.transform.pos, 10)
+	createExplosionWave(beacon.transform)
 	
 	local minPos = VecAdd(beacon.transform.pos, Vec(-range / 2, 0, -range / 2))
 	
@@ -224,7 +251,7 @@ function generateBeaconStreaks(beacon)
 		
 		dir = VecAdd(beaconPos, dir)
 		
-		dir = VecAdd(dir, Vec(0, 200, 0))
+		dir = VecAdd(dir, Vec(0, 400, 0))
 		
 		beacon.streaks[i].pos = dir
 		beacon.streaks[i].offset = i / 2
@@ -245,6 +272,17 @@ function createBeacon(transform)
 	currentBeacon.transform.pos = VecAdd(currentBeacon.transform.pos, Vec(0, 0.5, 0))
 	
 	generateBeaconStreaks(currentBeacon)
+end
+
+function createExplosionWave(transform)
+	-- TODO: Rework to array.
+	local transformCopy = TransformCopy(transform)
+	
+	local wave = deepcopy(explosionClass)
+	
+	wave.transform = transformCopy
+	
+	currentExplosionWave = wave
 end
 
 function drawBeaconAnim(dt, beacon)
@@ -300,8 +338,6 @@ function drawBeaconAnim(dt, beacon)
 				
 				local traveledDistance = dt * 100
 				
-				DebugPrint(distToBeacon)
-				
 				if distToBeacon <= 2 then
 					traveledDistance = 0
 				end
@@ -325,7 +361,7 @@ function drawBeaconAnim(dt, beacon)
 				local blue = 1
 				
 				if distToBeacon >= 2 or bTimer > 1.5 then
-					DrawSprite(lineSprite, spriteTransform, 3, 200, 0, 0.75, 1, alpha, true, false)
+					DrawSprite(lineSprite, spriteTransform, 3, 400, 0, 0.75, 1, alpha, true, false)
 				else
 					local red = math.random(0, 1)
 			
@@ -335,13 +371,11 @@ function drawBeaconAnim(dt, beacon)
 					
 					alpha = alpha / 1.2
 					
-					DrawSprite(lineSprite, spriteTransform, 7 + i * 5, 200, red, green, blue, alpha, true, false)
+					DrawSprite(lineSprite, spriteTransform, 7 + i * 5, 400, red, green, blue, alpha, true, false)
 				end
 			end
 		end
 	end
-	
-	-- TODO: After explosion effects
 	
 end
 
@@ -372,7 +406,17 @@ function beaconSoundHandler(dt, beacon)
 		return
 	end
 	
+	beacon.beepTimer = beacon.beepTimer + dt
 	
+	if beacon.beepTimer > 1 then
+		beacon.beepTimer = 0
+		PlaySound(beepSound, beacon.transform.pos)
+	end
+	
+	if beacon.timer <= 11 and beacon.warmupSndTriggered == false then
+		beacon.warmupSndTriggered = true
+		PlaySound(warmupSound, beacon.transform.pos, 10)
+	end
 end
 
 function evaSoundHandler(dt, beacon)
@@ -479,4 +523,30 @@ function beaconPlacementSound()
 	end
 	
 	UiSoundLoop(beaconPlacementSound, 10)
+end
+
+function explosionWaveHandler(dt, wave)
+	if wave == nil then
+		return true
+	end
+	
+	wave.lifetime = wave.lifetime + dt
+	
+	if wave.lifetime >= wave.maxLifetime then
+		return true
+	end
+	
+	local waveSize = wave.maxSize / wave.maxLifetime * wave.lifetime 
+	
+	local cameraTransform = GetCameraTransform()
+	
+	local lookRot = QuatLookAt(wave.transform.pos, cameraTransform.pos)
+	
+	local currTransform = Transform(wave.transform.pos, lookRot)
+	
+	local alpha = 1 - 100 / wave.maxLifetime * wave.lifetime / 100
+	
+	DrawSprite(sphereSprite, currTransform, waveSize, waveSize, 0, 0, 1, alpha, true, false)
+	
+	return false
 end
