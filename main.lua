@@ -473,6 +473,7 @@ function evaSoundHandler(dt, beacon)
 end
 
 function beaconPlacementSound()
+-- TODO: Fix this.
 	if not placingBeacon then
 		return
 	end
