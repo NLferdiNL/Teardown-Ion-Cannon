@@ -5,15 +5,16 @@
 
 local beaconClass = {
 	active = false,
+	evaTicker = 0,
 	transform = nil,
-	timer = 15,
+	timer = 30,
 	streaks = {},
 }
 
 -- TODO: Following variables to options.
 
 local range = 30 -- Centered around player.
-local explosions = 3 -- Amount of explosions divided between range.
+local explosions = 4 -- Amount of explosions divided between range.
 local explosionsUp = 5
 
 local circleSize = 75
@@ -32,6 +33,29 @@ local beaconSprite = nil
 local circleSprite = nil
 local lineSprite = nil
 
+local beepSound = nil
+
+-- TODO: Clean up number sounds
+local evaBeaconDeployedSound = "snd/ion_cannon_beacon_deployed.ogg"
+local evaSatelliteApproachingSound = "snd/warning_ion_cannon_satalite_approacing.ogg"
+local evaYouHaveSound =  "snd/eva_you_have.ogg"
+local evaCount20Sound =  "snd/eva_20.ogg"
+local evaCount15Sound =  "snd/eva_15.ogg"
+local evaCount10Sound =  "snd/eva_10.ogg"
+local evaCount09Sound =  "snd/eva_9.ogg"
+local evaCount08Sound =  "snd/eva_8.ogg"
+local evaCount07Sound =  "snd/eva_7.ogg"
+local evaCount06Sound =  "snd/eva_6.ogg"
+local evaCount05Sound =  "snd/eva_5.ogg"
+local evaCount04Sound =  "snd/eva_4.ogg"
+local evaCount03Sound =  "snd/eva_3.ogg"
+local evaCount02Sound =  "snd/eva_2.ogg"
+local evaCount01Sound =  "snd/eva_1.ogg"
+local evaCount00Sound =  "snd/eva_0.ogg"
+local evaSecondsToSound =  "snd/eva_seconds_to_reach_minimum_safe_distance.ogg"
+
+local placingBeaconSound = "snd/ion_beacon_set.ogg"
+
 local placingPlayerPos = nil
 
 function init()
@@ -43,6 +67,8 @@ function init()
 	beaconSprite = LoadSprite("sprites/beacon.png")
 	circleSprite = LoadSprite("sprites/circle.png")
 	lineSprite = LoadSprite("sprites/line.png")
+	
+	beepSound = LoadSound("snd/com_ion_beep.ogg")
 end
 
 function tick(dt)
@@ -54,10 +80,15 @@ function tick(dt)
 	drawBeaconAnim(dt, currentBeacon)
 	
 	beaconTimerLogic(dt, currentBeacon)
+	
+	beaconSoundHandler(dt, currentBeacon)
 end
 
 function draw(dt)	
 	drawUI(dt)
+	evaSoundHandler(dt, currentBeacon)
+	
+	beaconPlacementSound()
 end
 
 function toolLogic(dt)
@@ -293,7 +324,7 @@ function drawBeaconAnim(dt, beacon)
 				
 				local blue = 1
 				
-				if distToBeacon >= 2 and bTimer > 1.5 then
+				if distToBeacon >= 2 or bTimer > 1.5 then
 					DrawSprite(lineSprite, spriteTransform, 3, 200, 0, 0.75, 1, alpha, true, false)
 				else
 					local red = math.random(0, 1)
@@ -309,6 +340,8 @@ function drawBeaconAnim(dt, beacon)
 			end
 		end
 	end
+	
+	-- TODO: After explosion effects
 	
 end
 
@@ -332,4 +365,117 @@ function drawBeaconSprite(beacon)
 		
 		DrawSprite(beaconSprite, spriteTransform, 0.5, 0.5, 1, 1, 1, 1, true, false)
 	end
+end
+
+function beaconSoundHandler(dt, beacon)
+	if beacon == nil then
+		return
+	end
+	
+	
+end
+
+function evaSoundHandler(dt, beacon)
+	if beacon == nil then
+		return
+	end
+	
+	if beacon.evaTicker >= 1 and beacon.evaTicker < 12 then
+		beacon.evaTicker = beacon.evaTicker + dt
+	elseif beacon.evaTicker <= 0 then
+		beacon.evaTicker = 1
+		UiSound(evaBeaconDeployedSound)
+	end
+	
+	if beacon.evaTicker >= 4 and beacon.evaTicker < 5 then
+		beacon.evaTicker = 5
+		UiSound(evaSatelliteApproachingSound)
+	end
+	
+	if beacon.evaTicker >= 8.5 and beacon.evaTicker < 9 then
+		beacon.evaTicker = 9
+		UiSound(evaYouHaveSound)
+	end
+	
+	if beacon.evaTicker >= 10 and beacon.evaTicker < 11 then
+		beacon.evaTicker = 11
+		UiSound(evaCount20Sound)
+	end
+	
+	if beacon.evaTicker >= 11.5 and beacon.evaTicker < 12 then
+		beacon.evaTicker = 12
+		UiSound(evaSecondsToSound)
+	end
+	
+	if beacon.evaTicker <= 23 then
+		local bTimer = math.floor(beacon.timer)
+		
+		if bTimer == 15 and beacon.evaTicker == 12 then
+			UiSound(evaCount15Sound)
+			beacon.evaTicker = 13
+		end
+		
+		if bTimer == 10 and beacon.evaTicker == 13 then
+			UiSound(evaCount10Sound)
+			beacon.evaTicker = 14
+		end
+		
+		if bTimer == 9 and beacon.evaTicker == 14 then
+			UiSound(evaCount09Sound)
+			beacon.evaTicker = 15
+		end
+		
+		if bTimer == 8 and beacon.evaTicker == 15 then
+			UiSound(evaCount08Sound)
+			beacon.evaTicker = 16
+		end
+		
+		if bTimer == 7 and beacon.evaTicker == 16 then
+			UiSound(evaCount07Sound)
+			beacon.evaTicker = 17
+		end
+		
+		if bTimer == 6 and beacon.evaTicker == 17 then
+			UiSound(evaCount06Sound)
+			beacon.evaTicker = 18
+		end
+		
+		if bTimer == 5 and beacon.evaTicker == 18 then
+			UiSound(evaCount05Sound)
+			beacon.evaTicker = 19
+		end
+		
+		if bTimer == 4 and beacon.evaTicker == 19 then
+			UiSound(evaCount04Sound)
+			beacon.evaTicker = 20
+		end
+		
+		if bTimer == 3 and beacon.evaTicker == 20 then
+			UiSound(evaCount03Sound)
+			beacon.evaTicker = 21
+		end
+		
+		if bTimer == 2 and beacon.evaTicker == 21 then
+			UiSound(evaCount02Sound)
+			beacon.evaTicker = 22
+		end
+		
+		if bTimer == 1 and beacon.evaTicker == 22 then
+			UiSound(evaCount01Sound)
+			beacon.evaTicker = 23
+		end
+		
+		if bTimer == 0 and beacon.evaTicker == 23 then
+			UiSound(evaCount00Sound)
+			beacon.evaTicker = 24
+		end
+	end
+end
+
+function beaconPlacementSound()
+	if not placingBeacon then
+		return
+	end
+	
+	UiSoundLoop(beaconPlacementSound, 10)
 end
