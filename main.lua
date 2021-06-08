@@ -33,6 +33,7 @@ local circleSize = 75
 local currentBeacon = nil
 local currentExplosionWave = nil
 
+local startedPlacing = false
 local placingBeacon = false
 local toolDown = false
 
@@ -110,7 +111,7 @@ function draw(dt)
 	drawUI(dt)
 	evaSoundHandler(dt, currentBeacon)
 	
-	beaconPlacementSound()
+	beaconPlacementSoundHandler()
 end
 
 function toolLogic(dt)
@@ -124,6 +125,7 @@ function toolLogic(dt)
 	
 		if not toolDown then
 			placingBeacon = true
+			startedPlacing = true
 			placingPlayerPos = playerTransform.pos
 		end
 		
@@ -132,6 +134,7 @@ function toolLogic(dt)
 	else
 		toolDown = false
 		placingBeacon = false
+		startedPlacing = false
 	end
 end
 
@@ -516,13 +519,15 @@ function evaSoundHandler(dt, beacon)
 	end
 end
 
-function beaconPlacementSound()
+function beaconPlacementSoundHandler()
 -- TODO: Fix this.
-	if not placingBeacon then
+	if not placingBeacon or not startedPlacing then
 		return
 	end
 	
-	UiSoundLoop(beaconPlacementSound, 10)
+	startedPlacing = false
+	
+	UiSound(placingBeaconSound)
 end
 
 function explosionWaveHandler(dt, wave)
