@@ -14,24 +14,32 @@ local beaconClass = {
 }
 
 local explosionClass = {
+	active = false,
 	transform = nil,
 	maxSize = 50,
 	lifetime = 0,
 	maxLifetime = 0.5,
 }
 
+local activeBeacons = {}
+local activeWaves = {}
+
+local maxActiveBeacons = 5
+local maxActiveWaves = 5
+
+local currBeaconIndex = 1
+local currWaveIndex = 1
+
 -- TODO: Following variables to options.
 
 local range = 30 -- Centered around beacon.
-local explosions = 4 -- Amount of explosions divided between range.
+local explosions = 5 -- Amount of explosions divided between range.
 local explosionsUp = 5
-
-local circleSize = 75
 
 -- END OPTION VARS
 
-local currentBeacon = nil
-local currentExplosionWave = nil
+--local currentBeacon = nil
+--local currentExplosionWave = nil
 
 local startedPlacing = false
 local placingBeacon = false
@@ -48,6 +56,8 @@ local lineSprite = nil
 local beepSound = nil
 local warmupSound = nil
 local fireSound = nil
+
+local circleSize = 75
 
 -- TODO: Clean up number sounds
 local evaBeaconDeployedSound = "snd/ion_cannon_beacon_deployed.ogg"
@@ -75,7 +85,7 @@ local placingPlayerPos = nil
 function init()
 	saveFileInit()
 	
-	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon ", "MOD/vox/molotov.vox")
+	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon ", "MOD/vox/beacon.vox")
 	SetBool("game.tool.ioncannonbeacon.enabled", true)
 	
 	beaconSprite = LoadSprite("sprites/beacon.png")
@@ -92,30 +102,63 @@ function tick(dt)
 	toolLogic(dt)
 	placementLogic(dt)
 	
-	drawBeaconSprite(currentBeacon)
+	allBeaconsHandler(dt)
 	
-	drawBeaconAnim(dt, currentBeacon)
-	
-	if beaconTimerLogic(dt, currentBeacon) then
-		currentBeacon = nil
-	end
-	
-	beaconSoundHandler(dt, currentBeacon)
-	
-	if explosionWaveHandler(dt, currentExplosionWave) then
-		currentExplosionWave = nil
-	end
+	allWavesHandler(dt)
 end
 
 function draw(dt)	
 	drawUI(dt)
-	evaSoundHandler(dt, currentBeacon)
+	
+	allEvaHander(dt)
 	
 	beaconPlacementSoundHandler()
 end
 
+function allBeaconsHandler(dt)
+	for i = 1, #activeBeacons do
+		local currentBeacon = activeBeacons[i]
+		
+		if currentBeacon ~= nil and currentBeacon.active == true then
+			drawBeaconSprite(currentBeacon)
+	
+			drawBeaconAnim(dt, currentBeacon)
+			
+			if beaconTimerLogic(dt, currentBeacon) then
+				explodeBeacon(currentBeacon)
+				currentBeacon.active = false
+			end
+			
+			beaconSoundHandler(dt, currentBeacon)
+		end
+	end
+end
+
+function allWavesHandler(dt)
+	for i = 1, #activeWaves do
+		local currWave = activeWaves[i]
+		
+		if currWave ~= nil and currWave.active == true then
+			if explosionWaveHandler(dt, currWave) then
+				currWave.active = false
+			end
+		end
+	end
+end
+
+function allEvaHander(dt)
+	for i = 1, #activeBeacons do
+		local currentBeacon = activeBeacons[i]
+		
+		if currentBeacon ~= nil and currentBeacon.active == true then
+			evaSoundHandler(dt, currentBeacon)
+		end
+	end
+end
+
 function toolLogic(dt)
 	if GetString("game.player.tool") ~= "ioncannonbeacon" then
+		toolDown = false
 		placingBeacon = false
 		return
 	end
@@ -130,7 +173,10 @@ function toolLogic(dt)
 		end
 		
 		toolDown = true
-		SetPlayerTransform(Transform(placingPlayerPos, playerTransform.rot))
+		
+		if placingBeacon then
+			SetPlayerTransform(Transform(placingPlayerPos, playerTransform.rot))
+		end
 	else
 		toolDown = false
 		placingBeacon = false
@@ -153,7 +199,12 @@ function placementLogic(dt)
 	if currentPlacementTime >= placementTimer then
 		placingBeacon = false
 		currentPlacementTime = 0
-		createBeacon(GetPlayerTransform())
+		
+		local newBeacon = createBeacon(GetPlayerTransform())
+		
+		activeBeacons[currBeaconIndex] = newBeacon
+		
+		currBeaconIndex = (currBeaconIndex % maxActiveBeacons) + 1
 	end
 end
 
@@ -165,8 +216,6 @@ function beaconTimerLogic(dt, beacon)
 	beacon.timer = beacon.timer - dt
 	
 	if beacon.timer <= 0 then
-		explodeBeacon(beacon)
-		beacon.active = false
 		return true
 	end
 	
@@ -179,12 +228,17 @@ function explodeBeacon(beacon)
 	end
 	
 	PlaySound(fireSound, beacon.transform.pos, 10)
-	createExplosionWave(beacon.transform)
+	
+	local newWave = createExplosionWave(beacon.transform)
+	
+	activeWaves[currWaveIndex] = newWave
+		
+	currWaveIndex = (currWaveIndex % maxActiveWaves) + 1
 	
 	local minPos = VecAdd(beacon.transform.pos, Vec(-range / 2, 0, -range / 2))
 	
 	for y = 0, explosionsUp do
-		local currPos = VecAdd(beacon.transform.pos, Vec(0, range * 2 / explosionsUp * y, 0))
+		local currPos = VecAdd(beacon.transform.pos, Vec(0, range * 4 / explosionsUp * y, 0))
 		Explosion(currPos, 4)
 	end
 	
@@ -243,49 +297,49 @@ end
 function generateBeaconStreaks(beacon)
 	local beaconPos = beacon.transform.pos
 
-	for i = 1, 20 do
+	for i = 1, 15 do
 		beacon.streaks[i] = {}
 		
-		local dir = rndVec(10)
+		local dir = rndVec(1)
 		
 		dir[2] = beaconPos[2]
 		
-		dir = VecScale(dir, circleSize / 10)
+		dir = VecScale(dir, circleSize)
 		
 		dir = VecAdd(beaconPos, dir)
 		
 		dir = VecAdd(dir, Vec(0, 400, 0))
 		
 		beacon.streaks[i].pos = dir
-		beacon.streaks[i].offset = i / 2
+		beacon.streaks[i].offset = i
 		beacon.streaks[i].height = 100
 	end
 end
 
 function createBeacon(transform)
-	-- TODO: Rework to array.
-	if currentBeacon ~= nil and currentBeacon.active then
-		return
-	end
+	local currentBeacon = deepcopy(beaconClass)
 	
-	currentBeacon = deepcopy(beaconClass)
-	currentBeacon.transform = TransformCopy(transform)
 	currentBeacon.active = true
+	
+	currentBeacon.transform = TransformCopy(transform)
 	
 	currentBeacon.transform.pos = VecAdd(currentBeacon.transform.pos, Vec(0, 0.5, 0))
 	
 	generateBeaconStreaks(currentBeacon)
+	
+	return currentBeacon
 end
 
 function createExplosionWave(transform)
-	-- TODO: Rework to array.
 	local transformCopy = TransformCopy(transform)
 	
 	local wave = deepcopy(explosionClass)
 	
+	wave.active = true
+	
 	wave.transform = transformCopy
 	
-	currentExplosionWave = wave
+	return wave
 end
 
 function drawBeaconAnim(dt, beacon)
@@ -305,8 +359,8 @@ function drawBeaconAnim(dt, beacon)
 		
 		local alpha = 1 - (100 / 10 * bTimer / 100)
 		
-		for circle = 0, 15 do
-			local currPos = Vec(beaconPos[1], beaconPos[2] + circle * 50 + circleOffset, beaconPos[3])
+		for circle = 0, 10 do
+			local currPos = Vec(beaconPos[1], beaconPos[2] + circle * 100 + circleOffset, beaconPos[3])
 			local currRot = QuatLookAt(currPos, beaconPos)
 			
 			local currTransform = Transform(currPos, currRot)
@@ -324,7 +378,7 @@ function drawBeaconAnim(dt, beacon)
 			local lifetimeOffset = currStreak.offset
 			
 			if lifetimeOffset > 0 then
-				currStreak.offset = currStreak.offset - dt * 2
+				currStreak.offset = currStreak.offset - dt * 4
 			else
 				local currStreakPos = currStreak.pos
 				
@@ -400,7 +454,7 @@ function drawBeaconSprite(beacon)
 		
 		local spriteTransform = Transform(spritePos, beacon.transform.rot)
 		
-		DrawSprite(beaconSprite, spriteTransform, 0.5, 0.5, 1, 1, 1, 1, true, false)
+		DrawSprite(beaconSprite, spriteTransform, 0.25, 0.5, 1, 1, 1, 1, true, false)
 	end
 end
 

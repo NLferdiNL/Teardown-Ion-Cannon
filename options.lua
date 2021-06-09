@@ -1,7 +1,6 @@
 #include "scripts/savedata.lua"
 #include "scripts/textbox.lua"
 
-local sortedEffectList = {}
 local modname = "Ion Cannon Beacon"
 
 function init()
@@ -49,9 +48,11 @@ function draw()
 	
 		UiFont("bold.ttf", 48)
 		UiTranslate(0, 50)
-		UiText("Tetris")
+		UiText(modname)
 	
 		UiFont("regular.ttf", 26)
+		UiTranslate(0, 100)
+		UiText("Options coming soon!")
 	UiPop()
 end
 
