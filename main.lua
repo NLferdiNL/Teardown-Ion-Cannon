@@ -214,6 +214,8 @@ end
 
 -- Potential TODO: Find all broken objects in the area and
 --                 launch them from the center.
+-- Another TODO: Less lagg mode, remove small pieces of debris.
+--               (If total debris count is large.)
 function explodeBeacon(beacon)
 	if beacon == nil or beacon.active == false then
 		return
