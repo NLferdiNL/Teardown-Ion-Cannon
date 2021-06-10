@@ -30,17 +30,6 @@ local maxActiveWaves = 5
 local currBeaconIndex = 1
 local currWaveIndex = 1
 
--- TODO: Following variables to options.
-
-local range = 30 -- Centered around beacon.
-local explosions = 5 -- Amount of explosions divided between range.
-local explosionsUp = 5
-
--- END OPTION VARS
-
---local currentBeacon = nil
---local currentExplosionWave = nil
-
 local startedPlacing = false
 local placingBeacon = false
 local toolDown = false
@@ -57,7 +46,7 @@ local beepSound = nil
 local warmupSound = nil
 local fireSound = nil
 
-local circleSize = 75
+local spriteCircleSize = 75
 
 -- TODO: Clean up number sounds
 local evaBeaconDeployedSound = "snd/ion_cannon_beacon_deployed.ogg"
@@ -110,7 +99,9 @@ end
 function draw(dt)	
 	drawUI(dt)
 	
-	allEvaHander(dt)
+	if useEvaAnnouncer then
+		allEvaHander(dt)
+	end
 	
 	beaconPlacementSoundHandler()
 end
@@ -222,6 +213,8 @@ function beaconTimerLogic(dt, beacon)
 	return false
 end
 
+-- Potential TODO: Find all broken objects in the area and
+--                 launch them from the center.
 function explodeBeacon(beacon)
 	if beacon == nil or beacon.active == false then
 		return
@@ -304,7 +297,7 @@ function generateBeaconStreaks(beacon)
 		
 		dir[2] = beaconPos[2]
 		
-		dir = VecScale(dir, circleSize)
+		dir = VecScale(dir, spriteCircleSize)
 		
 		dir = VecAdd(beaconPos, dir)
 		
@@ -365,7 +358,7 @@ function drawBeaconAnim(dt, beacon)
 			
 			local currTransform = Transform(currPos, currRot)
 			
-			DrawSprite(circleSprite, currTransform, circleSize, circleSize, 0, 0.5, 1, alpha, true, false)
+			DrawSprite(circleSprite, currTransform, spriteCircleSize, spriteCircleSize, 0, 0.5, 1, alpha, true, false)
 		end
 	end
 	

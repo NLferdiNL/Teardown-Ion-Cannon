@@ -24,12 +24,13 @@ function draw()
 		UiButtonImageBox("ui/common/box-outline-6.png", 6, 6)
 		
 		if UiTextButton("Reset to default", 200, 50) then
-			--DEFAULTS
+			useEvaAnnouncer = true
 		end
 		
 		UiTranslate(0, 60)
 		
 		if UiTextButton("Save and exit", 200, 50) then
+			SetBool(moddataPrefix .. "UseEvaAnnouncer", useEvaAnnouncer)
 			Menu()
 		end
 		
@@ -50,9 +51,24 @@ function draw()
 		UiTranslate(0, 50)
 		UiText(modname)
 	
-		UiFont("regular.ttf", 26)
 		UiTranslate(0, 100)
-		UiText("Options coming soon!")
+		
+		UiFont("regular.ttf", 26)
+		UiButtonImageBox("ui/common/box-outline-6.png", 6, 6)
+		
+		local statusText = "Disabled"
+		
+		if useEvaAnnouncer then
+			statusText = "Enabled"
+		end
+		
+		if UiTextButton("Toggle EVA Announcer: " .. statusText , 400, 40) then
+			useEvaAnnouncer = not useEvaAnnouncer
+		end
+		
+		UiTranslate(0, 50)
+		
+		UiText("Disabling this option disables the announcer.")
 	UiPop()
 end
 
