@@ -71,7 +71,7 @@ local placingPlayerPos = nil
 function init()
 	saveFileInit()
 	
-	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon ", "MOD/vox/beacon.vox")
+	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon", "MOD/vox/beacon.vox")
 	SetBool("game.tool.ioncannonbeacon.enabled", true)
 	
 	beaconSprite = LoadSprite("sprites/beacon.png")

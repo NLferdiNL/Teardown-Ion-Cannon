@@ -1,4 +1,4 @@
 name = Ion Cannon Beacon
 author = NLferdiNL
 description = Ion Cannon Beacon from CnC Renegade
-tags = Gameplay
+tags = Tool
