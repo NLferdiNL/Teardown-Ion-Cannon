@@ -376,7 +376,7 @@ function generateBeaconStreaks(beacon)
 		
 		local dir = rndVec(1)
 		
-		dir[2] = beaconPos[2]
+		dir[2] = 0
 		
 		dir = VecScale(dir, spriteCircleSize)
 		
