@@ -11,6 +11,8 @@ local beaconClass = {
 	timer = 30,
 	streaks = {},
 	warmupSndTriggered = false,
+	rtsSpritePulse = 0,
+	rtsPulseForward = false
 }
 local maxActiveBeacons = 5
 local currBeaconIndex = 1
@@ -68,6 +70,8 @@ local placingBeaconSound = "snd/ion_beacon_set.ogg"
 
 local placingPlayerPos = nil
 
+local rtsCameraActive = GetBool("level.rtsCameraActive") or false
+
 function init()
 	saveFileInit()
 	
@@ -85,8 +89,18 @@ function init()
 end
 
 function tick(dt)
+	rtsCameraActive = GetBool("level.rtsCameraActive") or false
+	
+	if rtsCameraActive then
+		placementTimer = 1
+	else
+		placementTimer = 3
+	end
+	
 	toolLogic(dt)
 	placementLogic(dt)
+	
+	drawRTSPlacementSprite()
 	
 	allBeaconsHandler(dt)
 	
@@ -110,7 +124,7 @@ function toolLogic(dt)
 		return
 	end
 	
-	if InputDown("usetool") then
+	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) then
 		local playerTransform = GetPlayerTransform()
 	
 		if not toolDown then
@@ -121,7 +135,7 @@ function toolLogic(dt)
 		
 		toolDown = true
 		
-		if placingBeacon then
+		if placingBeacon and not rtsCameraActive then
 			SetPlayerTransform(Transform(placingPlayerPos, playerTransform.rot))
 		end
 	else
@@ -147,7 +161,27 @@ function placementLogic(dt)
 		placingBeacon = false
 		currentPlacementTime = 0
 		
-		local newBeacon = createBeacon(GetPlayerTransform())
+		local beaconTransform = nil
+		
+		if rtsCameraActive then
+			local cameraTransform = GetCameraTransform()
+			
+			local forwardPos = TransformToParentPoint(cameraTransform, Vec(0, 0, -2))
+			local satellitePos = TransformToParentPoint(cameraTransform, Vec(0, 0, -1))
+			local direction = VecDir(satellitePos, forwardPos)
+			
+			local hit, hitPoint = raycast(cameraTransform.pos, direction)
+			
+			if hit then
+				beaconTransform = Transform(hitPoint)
+			else
+				return
+			end
+		else
+			beaconTransform = GetPlayerTransform()
+		end
+	
+		local newBeacon = createBeacon(beaconTransform)
 		
 		activeBeacons[currBeaconIndex] = newBeacon
 		
@@ -204,6 +238,22 @@ function beaconTimerLogic(dt, beacon)
 	end
 	
 	beacon.timer = beacon.timer - dt
+	
+	if beacon.rtsPulseForward then
+		beacon.rtsSpritePulse = beacon.rtsSpritePulse + dt / 2
+		
+		if beacon.rtsSpritePulse > 0.3 then
+			beacon.rtsSpritePulse = 0.3
+			beacon.rtsPulseForward = false
+		end
+	else
+		beacon.rtsSpritePulse = beacon.rtsSpritePulse - dt / 2
+		
+		if beacon.rtsSpritePulse < 0 then
+			beacon.rtsSpritePulse = 0
+			beacon.rtsPulseForward = true
+		end
+	end
 	
 	if beacon.timer <= 0 then
 		return true
@@ -362,6 +412,28 @@ end
 
 -- Sprite functions
 
+function drawRTSPlacementSprite()
+	if not rtsCameraActive or GetString("game.player.tool") ~= "ioncannonbeacon" then
+		return
+	end
+	
+	local cameraTransform = GetCameraTransform()
+	
+	local forwardPos = TransformToParentPoint(cameraTransform, Vec(0, 0, -2))
+	local satellitePos = TransformToParentPoint(cameraTransform, Vec(0, 0, -1))
+	local direction = VecDir(satellitePos, forwardPos)
+	
+	local hit, hitPoint = raycast(cameraTransform.pos, direction)
+	
+	if not hit then
+		return
+	end
+	
+	local spriteRot = QuatLookAt(hitPoint, VecAdd(hitPoint, Vec(0, 1, 0)))
+	
+	DrawSprite(circleSprite, Transform(hitPoint, spriteRot), spriteCircleSize / 10, spriteCircleSize / 10, 1, 1, 0, 1, false, false)
+end
+
 function drawBeaconAnim(dt, beacon)
 	if beacon == nil then
 		return
@@ -461,19 +533,35 @@ function drawBeaconSprite(beacon)
 		
 		local spritePos = VecCopy(beaconPos)
 		
-		spritePos = VecAdd(spritePos, Vec(0, -0.25, 0))
+		if rtsCameraActive then
+			spritePos = VecAdd(spritePos, Vec(0, -0.5, 0))
+		else
+			spritePos = VecAdd(spritePos, Vec(0, -0.25, 0))
+		end
 	
 		local cameraTransform = GetCameraTransform()
 		
-		local lookPos = VecCopy(cameraTransform.pos)
+		local lookPos = nil
 		
-		lookPos[2] = beaconPos[2]
+		if rtsCameraActive then
+			lookPos = VecAdd(spritePos, Vec(0, 1, 0))
+		else
+			lookPos = VecCopy(cameraTransform.pos)
+			
+			lookPos[2] = beaconPos[2]
+		end
 	
 		beacon.transform.rot = QuatLookAt(beaconPos, lookPos)
 		
 		local spriteTransform = Transform(spritePos, beacon.transform.rot)
 		
-		DrawSprite(beaconSprite, spriteTransform, 0.25, 0.5, 1, 1, 1, 1, true, false)
+		local spriteToUse = nil
+		
+		if rtsCameraActive then
+			DrawSprite(circleSprite, spriteTransform, spriteCircleSize, spriteCircleSize, 0, 0.5, 0.7, 0.1 + beacon.rtsSpritePulse, false, false)
+		else
+			DrawSprite(beaconSprite, spriteTransform, 0.25, 0.5, 1, 1, 1, 1, true, false)
+		end
 	end
 end
 
