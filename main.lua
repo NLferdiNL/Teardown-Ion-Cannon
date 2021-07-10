@@ -75,6 +75,16 @@ local rtsCameraActive = GetBool("level.rtsCameraActive") or false
 function init()
 	saveFileInit()
 	
+	if downgradeExplosion then
+		range = math.floor(range / 2)
+		explosions = 3
+	end
+	
+	if quickTrigger then
+		placementTimer = 1
+		beaconClass.timer = 20
+	end
+	
 	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon", "MOD/vox/beacon.vox")
 	SetBool("game.tool.ioncannonbeacon.enabled", true)
 	
@@ -93,7 +103,7 @@ function tick(dt)
 	
 	if rtsCameraActive then
 		placementTimer = 1
-	else
+	elseif not quickTrigger then
 		placementTimer = 3
 	end
 	
@@ -619,7 +629,11 @@ function evaSoundHandler(dt, beacon)
 	
 	if beacon.evaTicker >= 10 and beacon.evaTicker < 11 then
 		beacon.evaTicker = 11
-		UiSound(evaCount20Sound)
+		if quickTrigger then
+			UiSound(evaCount10Sound)
+		else
+			UiSound(evaCount20Sound)
+		end
 	end
 	
 	if beacon.evaTicker >= 11.5 and beacon.evaTicker < 12 then
@@ -630,7 +644,9 @@ function evaSoundHandler(dt, beacon)
 	if beacon.evaTicker <= 23 then
 		local bTimer = math.floor(beacon.timer)
 		
-		if bTimer == 15 and beacon.evaTicker == 12 then
+		if quickTrigger and beacon.evaTicker == 12 then
+			beacon.evaTicker = 18
+		elseif bTimer == 15 and beacon.evaTicker == 12 then
 			UiSound(evaCount15Sound)
 			beacon.evaTicker = 13
 		end
