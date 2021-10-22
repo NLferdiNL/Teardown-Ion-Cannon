@@ -9,6 +9,9 @@ function saveFileInit()
 	downgradeExplosion = GetBool(moddataPrefix .. "DowngradeExplosion")
 	quickTrigger = GetBool(moddataPrefix .. "QuickTrigger")
 	
+	evaVolume = GetFloat(moddataPrefix .. "EvaVolume")
+	effectVolume = GetFloat(moddataPrefix .. "EffectVolume")
+	
 	if saveVersion < 1 or saveVersion == nil then
 		saveVersion = 1
 		SetInt(moddataPrefix .. "Version", saveVersion)
@@ -43,5 +46,21 @@ function saveFileInit()
 		
 		explosionsUp = 15
 		SetInt(moddataPrefix .. "ExplosionsUp", explosionsUp)
+	end
+	
+	if saveVersion < 4 then
+		saveVersion = 4
+		SetInt(moddataPrefix .. "Version", saveVersion)
+		
+		evaVolume = 1
+		
+		if not useEvaAnnouncer then
+			evaVolume = 0
+		end
+		
+		SetFloat(moddataPrefix .. "EvaVolume", evaVolume)
+		
+		effectVolume = 1
+		SetFloat(moddataPrefix .. "EffectVolume", effectVolume)
 	end
 end

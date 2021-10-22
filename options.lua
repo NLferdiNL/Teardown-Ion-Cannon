@@ -8,6 +8,8 @@ local disabledText = "Disabled"
 
 function init()
 	saveFileInit()
+	
+	for i = 1, 20 do DebugPrint(" ") end
 end
 
 function draw()
@@ -30,14 +32,18 @@ function draw()
 			useEvaAnnouncer = true
 			downgradeExplosion = false
 			quickTrigger = false
+			evaVolume = 1
+			effectVolume = 1
 		end
 		
 		UiTranslate(0, 60)
 		
 		if UiTextButton("Save and exit", 200, 50) then
-			SetBool(moddataPrefix .. "UseEvaAnnouncer", useEvaAnnouncer)
+			--SetBool(moddataPrefix .. "UseEvaAnnouncer", useEvaAnnouncer)
 			SetBool(moddataPrefix .. "DowngradeExplosion", downgradeExplosion)
 			SetBool(moddataPrefix .. "QuickTrigger", quickTrigger)
+			SetFloat(moddataPrefix .. "EvaVolume", evaVolume)
+			SetFloat(moddataPrefix .. "EffectVolume", effectVolume)
 			Menu()
 		end
 		
@@ -49,7 +55,7 @@ function draw()
 	UiPop()
 	
 	UiPush()
-		UiWordWrap(800)
+		UiWordWrap(700)
 	
 		UiTranslate(UiCenter(), 50)
 		UiAlign("center middle")
@@ -57,15 +63,13 @@ function draw()
 		UiFont("bold.ttf", 60)
 		UiTranslate(0, 50)
 		UiText(modname)
-		
-		UiWordWrap(400)
 	
 		UiTranslate(0, 80)
 		
 		UiFont("regular.ttf", 26)
 		UiButtonImageBox("ui/common/box-outline-6.png", 6, 6)
 		
-		if UiTextButton("Toggle EVA Announcer: " .. (useEvaAnnouncer and enabledText or disabledText) , 400, 40) then
+		--[[if UiTextButton("Toggle EVA Announcer: " .. (useEvaAnnouncer and enabledText or disabledText) , 400, 40) then
 			useEvaAnnouncer = not useEvaAnnouncer
 		end
 		
@@ -73,7 +77,7 @@ function draw()
 		
 		UiText("Disabling this option disables the announcer.")
 		
-		UiTranslate(0, 70)
+		UiTranslate(0, 70)]]--
 		
 		if UiTextButton("Toggle Lite Beacon: " .. (downgradeExplosion and enabledText or disabledText) , 400, 40) then
 			downgradeExplosion = not downgradeExplosion
@@ -92,9 +96,49 @@ function draw()
 		UiTranslate(0, 50)
 		
 		UiText("Enabling this open shortens the countdown.")
+		
+		UiTranslate(0, 100)
+		
+		UiText("EVA (Announcer) Volume")
+		
+		UiTranslate(0, 25)
+		
+		evaVolume = slider(evaVolume, 0, 1, 200)
+		
+		UiTranslate(0, 50)
+		
+		UiText("This allows you to lower the volume of EVA, or completely disable it.\n(If you had her off previously, this should've been set automatically)")
+		
+		UiTranslate(0, 100)
+		
+		UiText("Effect Volume")
+		
+		UiTranslate(0, 25)
+		
+		effectVolume = slider(effectVolume, 0, 1, 200)
+		
+		UiTranslate(0, 50)
+		UiText("This modifies the sound of the sound effects. Such as the charging sound.")
 	UiPop()
 end
 
 function tick()
 	textboxClass.tick()
+end
+
+function slider(value, min, max, width)
+	local done = true
+	value = (value - min) / (max - min)
+	UiPush()
+		UiRect(width, 3)
+		UiTranslate(-width / 2, 0)
+		value, done = UiSlider("ui/common/dot.png", "x", value * width, 0, width) / width
+		
+		value = roundToDecimal((value * (max-min) + min), 2)
+		
+		UiTranslate(-50, 0)
+		UiText(value)
+	UiPop()
+	
+	return value, done
 end

@@ -120,7 +120,7 @@ end
 function draw(dt)	
 	drawUI(dt)
 	
-	if useEvaAnnouncer then
+	if evaVolume > 0 then
 		allEvaHander(dt)
 	end
 	
@@ -281,7 +281,7 @@ function explodeBeacon(beacon)
 		return
 	end
 	
-	PlaySound(fireSound, beacon.transform.pos, 10)
+	PlaySound(fireSound, beacon.transform.pos, effectVolume * 10)
 	
 	local newWave = createExplosionWave(beacon.transform)
 	
@@ -411,12 +411,12 @@ function beaconSoundHandler(dt, beacon)
 	
 	if beacon.beepTimer > 1 then
 		beacon.beepTimer = 0
-		PlaySound(beepSound, beacon.transform.pos)
+		PlaySound(beepSound, beacon.transform.pos, effectVolume)
 	end
 	
 	if beacon.timer <= 11 and beacon.warmupSndTriggered == false then
 		beacon.warmupSndTriggered = true
-		PlaySound(warmupSound, beacon.transform.pos, 10)
+		PlaySound(warmupSound, beacon.transform.pos, effectVolume * 10)
 	end
 end
 
@@ -614,31 +614,31 @@ function evaSoundHandler(dt, beacon)
 		beacon.evaTicker = beacon.evaTicker + dt
 	elseif beacon.evaTicker <= 0 then
 		beacon.evaTicker = 1
-		UiSound(evaBeaconDeployedSound)
+		UiSound(evaBeaconDeployedSound, evaVolume)
 	end
 	
 	if beacon.evaTicker >= 4 and beacon.evaTicker < 5 then
 		beacon.evaTicker = 5
-		UiSound(evaSatelliteApproachingSound)
+		UiSound(evaSatelliteApproachingSound, evaVolume)
 	end
 	
 	if beacon.evaTicker >= 8.5 and beacon.evaTicker < 9 then
 		beacon.evaTicker = 9
-		UiSound(evaYouHaveSound)
+		UiSound(evaYouHaveSound, evaVolume)
 	end
 	
 	if beacon.evaTicker >= 10 and beacon.evaTicker < 11 then
 		beacon.evaTicker = 11
 		if quickTrigger then
-			UiSound(evaCount10Sound)
+			UiSound(evaCount10Sound, evaVolume)
 		else
-			UiSound(evaCount20Sound)
+			UiSound(evaCount20Sound, evaVolume)
 		end
 	end
 	
 	if beacon.evaTicker >= 11.5 and beacon.evaTicker < 12 then
 		beacon.evaTicker = 12
-		UiSound(evaSecondsToSound)
+		UiSound(evaSecondsToSound, evaVolume)
 	end
 	
 	if beacon.evaTicker <= 23 then
@@ -647,62 +647,62 @@ function evaSoundHandler(dt, beacon)
 		if quickTrigger and beacon.evaTicker == 12 then
 			beacon.evaTicker = 18
 		elseif bTimer == 15 and beacon.evaTicker == 12 then
-			UiSound(evaCount15Sound)
+			UiSound(evaCount15Sound, evaVolume)
 			beacon.evaTicker = 13
 		end
 		
 		if bTimer == 10 and beacon.evaTicker == 13 then
-			UiSound(evaCount10Sound)
+			UiSound(evaCount10Sound, evaVolume)
 			beacon.evaTicker = 14
 		end
 		
 		if bTimer == 9 and beacon.evaTicker == 14 then
-			UiSound(evaCount09Sound)
+			UiSound(evaCount09Sound, evaVolume)
 			beacon.evaTicker = 15
 		end
 		
 		if bTimer == 8 and beacon.evaTicker == 15 then
-			UiSound(evaCount08Sound)
+			UiSound(evaCount08Sound, evaVolume)
 			beacon.evaTicker = 16
 		end
 		
 		if bTimer == 7 and beacon.evaTicker == 16 then
-			UiSound(evaCount07Sound)
+			UiSound(evaCount07Sound, evaVolume)
 			beacon.evaTicker = 17
 		end
 		
 		if bTimer == 6 and beacon.evaTicker == 17 then
-			UiSound(evaCount06Sound)
+			UiSound(evaCount06Sound, evaVolume)
 			beacon.evaTicker = 18
 		end
 		
 		if bTimer == 5 and beacon.evaTicker == 18 then
-			UiSound(evaCount05Sound)
+			UiSound(evaCount05Sound, evaVolume)
 			beacon.evaTicker = 19
 		end
 		
 		if bTimer == 4 and beacon.evaTicker == 19 then
-			UiSound(evaCount04Sound)
+			UiSound(evaCount04Sound, evaVolume)
 			beacon.evaTicker = 20
 		end
 		
 		if bTimer == 3 and beacon.evaTicker == 20 then
-			UiSound(evaCount03Sound)
+			UiSound(evaCount03Sound, evaVolume)
 			beacon.evaTicker = 21
 		end
 		
 		if bTimer == 2 and beacon.evaTicker == 21 then
-			UiSound(evaCount02Sound)
+			UiSound(evaCount02Sound, evaVolume)
 			beacon.evaTicker = 22
 		end
 		
 		if bTimer == 1 and beacon.evaTicker == 22 then
-			UiSound(evaCount01Sound)
+			UiSound(evaCount01Sound, evaVolume)
 			beacon.evaTicker = 23
 		end
 		
 		if bTimer == 0 and beacon.evaTicker == 23 then
-			UiSound(evaCount00Sound)
+			UiSound(evaCount00Sound, evaVolume)
 			beacon.evaTicker = 24
 		end
 	end
@@ -715,5 +715,5 @@ function beaconPlacementSoundHandler()
 	
 	startedPlacing = false
 	
-	UiSound(placingBeaconSound)
+	UiSound(placingBeaconSound, effectVolume)
 end
