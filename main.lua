@@ -12,7 +12,10 @@ local beaconClass = {
 	streaks = {},
 	warmupSndTriggered = false,
 	rtsSpritePulse = 0,
-	rtsPulseForward = false
+	rtsPulseForward = false,
+	bodyId = 0,
+	playDisarmSound = false,
+	static = true,
 }
 local maxActiveBeacons = 5
 local currBeaconIndex = 1
@@ -32,6 +35,7 @@ local activeWaves = {}
 local startedPlacing = false
 local placingBeacon = false
 local toolDown = false
+local grabDown = false
 
 local placementTimer = 3
 local currentPlacementTime = 0
@@ -65,6 +69,7 @@ local evaCount02Sound =  "snd/eva_2.ogg"
 local evaCount01Sound =  "snd/eva_1.ogg"
 local evaCount00Sound =  "snd/eva_0.ogg"
 local evaSecondsToSound =  "snd/eva_seconds_to_reach_minimum_safe_distance.ogg"
+local evaDisarmedSound = "snd/beacon_disarmed.ogg"
 
 local placingBeaconSound = "snd/ion_beacon_set.ogg"
 
@@ -134,7 +139,7 @@ function toolLogic(dt)
 		return
 	end
 	
-	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) then
+	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) or InputDown("grab") then
 		local playerTransform = GetPlayerTransform()
 	
 		if not toolDown then
@@ -191,7 +196,9 @@ function placementLogic(dt)
 			beaconTransform = GetPlayerTransform()
 		end
 	
-		local newBeacon = createBeacon(beaconTransform)
+		local static = not InputDown("grab")
+	
+		local newBeacon = createBeacon(beaconTransform, static)
 		
 		activeBeacons[currBeaconIndex] = newBeacon
 		
@@ -206,16 +213,25 @@ function allBeaconsHandler(dt)
 		local currentBeacon = activeBeacons[i]
 		
 		if currentBeacon ~= nil and currentBeacon.active == true then
-			drawBeaconSprite(currentBeacon)
-	
-			drawBeaconAnim(dt, currentBeacon)
-			
-			if beaconTimerLogic(dt, currentBeacon) then
-				explodeBeacon(currentBeacon)
+			if IsBodyBroken(currentBeacon.bodyId) or IsShapeBroken(currentBeacon.bodyId) then
+				currentBeacon.playDisarmSound = true
 				currentBeacon.active = false
+			else
+				--drawBeaconSprite(currentBeacon)
+	
+				drawBeaconAnim(dt, currentBeacon)
+				
+				if not currentBeacon.static then
+					currentBeacon.transform = GetBodyTransform(currentBeacon.bodyId)
+				end
+				
+				if beaconTimerLogic(dt, currentBeacon) then
+					explodeBeacon(currentBeacon)
+					currentBeacon.active = false
+				end
+				
+				beaconSoundHandler(dt, currentBeacon)
 			end
-			
-			beaconSoundHandler(dt, currentBeacon)
 		end
 	end
 end
@@ -236,8 +252,13 @@ function allEvaHander(dt)
 	for i = 1, #activeBeacons do
 		local currentBeacon = activeBeacons[i]
 		
-		if currentBeacon ~= nil and currentBeacon.active == true then
-			evaSoundHandler(dt, currentBeacon)
+		if currentBeacon ~= nil then
+			if currentBeacon.active == true then
+				evaSoundHandler(dt, currentBeacon)
+			elseif currentBeacon.playDisarmSound then
+				currentBeacon.playDisarmSound = false
+				UiSound(evaDisarmedSound, evaVolume)
+			end
 		end
 	end
 end
@@ -352,7 +373,7 @@ end
 
 -- Creation Functions
 
-function createBeacon(transform)
+function createBeacon(transform, static)
 	local currentBeacon = deepcopy(beaconClass)
 	
 	currentBeacon.active = true
@@ -360,6 +381,12 @@ function createBeacon(transform)
 	currentBeacon.transform = TransformCopy(transform)
 	
 	currentBeacon.transform.pos = VecAdd(currentBeacon.transform.pos, Vec(0, 0.5, 0))
+	
+	local beaconBody = Spawn("<voxbox size='5 8 5' prop='" .. tostring(not static) .. "' brush='MOD/vox/beacon.vox' material='metal'/>", transform, true)[1]
+	
+	currentBeacon.bodyId = beaconBody
+	
+	currentBeacon.static = static
 	
 	generateBeaconStreaks(currentBeacon)
 	
