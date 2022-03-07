@@ -139,7 +139,7 @@ function toolLogic(dt)
 		return
 	end
 	
-	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) or InputDown("grab") then
+	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) or InputDown("rmb") then
 		local playerTransform = GetPlayerTransform()
 	
 		if not toolDown then
@@ -196,7 +196,7 @@ function placementLogic(dt)
 			beaconTransform = GetPlayerTransform()
 		end
 	
-		local static = not InputDown("grab")
+		local static = not InputDown("rmb")
 	
 		local newBeacon = createBeacon(beaconTransform, static)
 		
