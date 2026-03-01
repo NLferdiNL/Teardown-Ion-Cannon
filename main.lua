@@ -301,6 +301,8 @@ function server.allBeaconsHandler(dt)
 					currentBeacon.warmupSndTriggered = true
 					--PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
 				end
+				
+				server.calculateStreaks(dt, currentBeacon)
 			end
 		end
 	end
@@ -539,32 +541,13 @@ function client.drawRTSPlacementSprite()
 	DrawSprite(circleSprite, Transform(hitPoint, spriteRot), spriteCircleSize / 10, spriteCircleSize / 10, 1, 1, 0, 1, false, false)
 end
 
-function client.drawBeaconAnim(dt, beacon)
-	if beacon == nil then
-		return
-	end
-	
-	local cameraTransform = GetCameraTransform()
+function client.drawStreak(spriteTransform, width, height, r, g, b, a, depth, add)
+	DrawSprite(lineSprite, spriteTransform, width, height, r, g, b, a, depth, add)
+end
+
+function server.calculateStreaks(dt, beacon)
 	local beaconPos = beacon.transform.pos
 	local bTimer = beacon.timer
-	
-	--Circle down
-	if bTimer <= 12 then
-		local circleOffset = -(10 - bTimer) * 50 - (10 - bTimer) * 100
-		
-		circleOffset = circleOffset % 200 - 200
-		
-		local alpha = 1 - (100 / 10 * bTimer / 100)
-		
-		for circle = 0, 10 do
-			local currPos = Vec(beaconPos[1], beaconPos[2] + circle * 100 + circleOffset, beaconPos[3])
-			local currRot = QuatLookAt(currPos, VecAdd(currPos, Vec(0, 1, 0)))
-			
-			local currTransform = Transform(currPos, currRot)
-			
-			DrawSprite(circleSprite, currTransform, spriteCircleSize, spriteCircleSize, 0, 0.5, 1, alpha, true, false)
-		end
-	end
 	
 	-- Centering Streaks
 	if bTimer <= 10 then
@@ -577,11 +560,12 @@ function client.drawBeaconAnim(dt, beacon)
 			if lifetimeOffset > 0 then
 				currStreak.offset = currStreak.offset - dt * 4
 			else
+				
 				local currStreakPos = currStreak.pos
 				
 				local dirToBeacon = VecDir(currStreakPos, beaconPos)
 				
-				local streakLookAtPos = VecCopy(cameraTransform.pos)
+				local streakLookAtPos = VecCopy(beaconPos)
 				streakLookAtPos[2] = currStreakPos[2]
 				
 				local beaconAdjustedForHeightPos = VecCopy(beaconPos)
@@ -614,8 +598,13 @@ function client.drawBeaconAnim(dt, beacon)
 				
 				local blue = 1
 				
+				if i == 1 then
+					DebugPrint(spriteTransform)
+				end
+				
 				if distToBeacon >= 2 or bTimer > 1.5 then
-					DrawSprite(lineSprite, spriteTransform, 3, 400, 0, 0.75, 1, alpha, true, false)
+					ClientCall(0, "client.drawStreak", spriteTransform, 3, 400, 0, 0.75, 1, alpha, true, false)
+					DebugLine(GetPlayerTransform(0), spriteTransform, 1, 0, 0, 1)
 				else
 					local red = math.random(0, 1)
 			
@@ -625,9 +614,38 @@ function client.drawBeaconAnim(dt, beacon)
 					
 					alpha = alpha / 1.2
 					
-					DrawSprite(lineSprite, spriteTransform, 7 + i * 5, 400, red, green, blue, alpha, true, false)
+					ClientCall(0, "client.drawStreak", spriteTransform, 7 + i * 5, 400, red, green, blue, alpha, true, false)
+					DebugLine(GetPlayerTransform(0), spriteTransform, 1, 0, 0, 1)
 				end
 			end
+		end
+	end
+end
+
+function client.drawBeaconAnim(dt, beacon)
+	if beacon == nil then
+		return
+	end
+	
+	local cameraTransform = GetCameraTransform()
+	local beaconPos = beacon.transform.pos
+	local bTimer = beacon.timer
+	
+	--Circle down
+	if bTimer <= 12 then
+		local circleOffset = -(10 - bTimer) * 50 - (10 - bTimer) * 100
+		
+		circleOffset = circleOffset % 200 - 200
+		
+		local alpha = 1 - (100 / 10 * bTimer / 100)
+		
+		for circle = 0, 10 do
+			local currPos = Vec(beaconPos[1], beaconPos[2] + circle * 100 + circleOffset, beaconPos[3])
+			local currRot = QuatLookAt(currPos, VecAdd(currPos, Vec(0, 1, 0)))
+			
+			local currTransform = Transform(currPos, currRot)
+			
+			DrawSprite(circleSprite, currTransform, spriteCircleSize, spriteCircleSize, 0, 0.5, 1, alpha, true, false)
 		end
 	end
 end
@@ -705,7 +723,6 @@ end
 local evaQueue = {}
 
 function client.queueEvaSound(snd)
-	DebugPrint(snd)
 	evaQueue[#evaQueue + 1] = snd
 end
 
