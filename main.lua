@@ -1,3 +1,6 @@
+#version 2
+#include "script/include/player.lua"
+#include "script/include/common.lua"
 #include "datascripts/color4.lua"
 #include "scripts/utils.lua"
 #include "scripts/savedata.lua"
@@ -17,8 +20,10 @@ local beaconClass = {
 	playDisarmSound = false,
 	static = true,
 }
-local maxActiveBeacons = 5
-local currBeaconIndex = 1
+
+local playerInputStates = {}
+
+local maxActiveBeaconsPerPlayer = 1
 local activeBeacons = {}
 
 local explosionWaveClass = {
@@ -32,13 +37,16 @@ local currWaveIndex = 1
 local maxActiveWaves = 5
 local activeWaves = {}
 
-local startedPlacing = false
+--[[local startedPlacing = false
 local placingBeacon = false
 local toolDown = false
-local grabDown = false
+local grabDown = false]]--
 
-local placementTimer = 3
-local currentPlacementTime = 0
+--local placementTimer = 3
+--local currentPlacementTime = 0
+
+--TODO MP: Fix centering streaks
+--TODO MP: Fix beacon circles flickering due to lifetime
 
 local beaconSprite = nil
 local circleSprite = nil
@@ -73,11 +81,19 @@ local evaDisarmedSound = "snd/beacon_disarmed.ogg"
 
 local placingBeaconSound = "snd/ion_beacon_set.ogg"
 
-local placingPlayerPos = nil
+--local placingPlayerPos = nil
 
-local rtsCameraActive = GetBool("level.rtsCameraActive") or false
+--local rtsCameraActive = GetBool("level.rtsCameraActive") or false
 
-function init()
+downgradeExplosion = false
+quickTrigger = false
+evaVolume = 1
+effectVolume = 1
+
+local clientInputStates = {}
+local clientEvaQueue = {}
+
+function server.init()
 	saveFileInit()
 	
 	if downgradeExplosion then
@@ -90,9 +106,13 @@ function init()
 		beaconClass.timer = 20
 	end
 	
-	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon", "MOD/vox/beacon.vox")
-	SetBool("game.tool.ioncannonbeacon.enabled", true)
+	evaVolume = evaVolume / 10
 	
+	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon", "MOD/vox/beacon.vox", 4)
+	SetBool("game.tool.ioncannonbeacon.enabled", true)
+end
+
+function client.init()
 	beaconSprite = LoadSprite("sprites/beacon.png")
 	circleSprite = LoadSprite("sprites/circle.png")
 	sphereSprite = LoadSprite("sprites/sphere.png")
@@ -103,82 +123,118 @@ function init()
 	fireSound = LoadSound("snd/ion_fire.ogg")
 end
 
-function tick(dt)
-	rtsCameraActive = GetBool("level.rtsCameraActive") or false
+function server.tick(dt)
+	--rtsCameraActive = GetBool("level.rtsCameraActive") or false
 	
-	if rtsCameraActive then
+	--[[if rtsCameraActive then
 		placementTimer = 1
 	elseif not quickTrigger then
 		placementTimer = 3
+	end]]--
+	
+	for id in PlayersAdded() do
+		SetToolEnabled(true, id)
+		playerInputStates[id] = {toolDown = false, placingBeacon = false, rtsCameraActive = false, placementTimer = 3, currentPlacementTime = 0, placingPlayerPos = Vec()}
 	end
 	
-	toolLogic(dt)
-	placementLogic(dt)
+	for id in PlayersRemoved() do
+		playerInputStates[id] = nil
+	end
 	
-	drawRTSPlacementSprite()
+	for id in Players() do
+		server.toolLogic(dt, id)
+		server.placementLogic(dt, id)
+		
+		ClientCall(id, "client.getInputStates", playerInputStates[id])
+	end
 	
-	allBeaconsHandler(dt)
+	server.allBeaconsHandler(dt)
 	
-	allWavesHandler(dt)
+	server.allWavesHandler(dt)
 end
 
-function draw(dt)	
+function client.tick()
+	client.drawRTSPlacementSprite()
+end
+
+function client.getBeacons(beacons)
+	activeBeacons = beacons
+end
+
+function client.getInputStates(newStates)
+	clientInputStates = newStates
+end
+
+function client.draw(dt)
 	drawUI(dt)
 	
-	if evaVolume > 0 then
-		allEvaHander(dt)
-	end
+	client.evaSoundHandler()
 	
-	beaconPlacementSoundHandler()
+	client.beaconPlacementSoundHandler()
+
+	--[[if evaVolume > 0 then
+		client.allEvaHander(dt)
+	end]]--
 end
 
-function toolLogic(dt)
-	if GetString("game.player.tool") ~= "ioncannonbeacon" then
-		toolDown = false
-		placingBeacon = false
+function server.toolLogic(dt, playerId)
+	local currInputState = playerInputStates[playerId]
+	if GetPlayerTool(playerId) ~= "ioncannonbeacon" then
+		currInputState.toolDown = false
+		currInputState.placingBeacon = false
 		return
 	end
 	
-	if InputDown("usetool") or (rtsCameraActive and InputDown("lmb")) or InputDown("rmb") then
-		local playerTransform = GetPlayerTransform()
-	
-		if not toolDown then
-			placingBeacon = true
-			startedPlacing = true
-			placingPlayerPos = playerTransform.pos
+	if InputDown("usetool", playerId) or (currInputState.rtsCameraActive and InputDown("lmb", playerId)) or InputDown("rmb", playerId) then
+		local playerTransform = GetPlayerTransform(playerId)
+		
+		if not currInputState.toolDown then
+			currInputState.placingBeacon = true
+			currInputState.startedPlacing = true
+			if currInputState.rtsCameraActive then
+				currInputState.placementTimer = 1
+			else
+				currInputState.placementTimer = 3
+			end
+			currInputState.currentPlacementTime = 0
+			currInputState.placingPlayerPos = playerTransform.pos
+			
+			--ClientCall(playerId, "client.beaconPlacementSoundHandler", currInputState)
 		end
 		
-		toolDown = true
+		currInputState.toolDown = true
 		
-		if placingBeacon and not rtsCameraActive then
-			SetPlayerTransform(Transform(placingPlayerPos, playerTransform.rot))
+		if currInputState.placingBeacon and not currInputState.rtsCameraActive then
+			SetPlayerTransform(Transform(currInputState.placingPlayerPos, playerTransform.rot), playerId)
 		end
 	else
-		toolDown = false
-		placingBeacon = false
-		startedPlacing = false
+		currInputState.toolDown = false
+		currInputState.placingBeacon = false
+		currInputState.startedPlacing = false
 	end
 end
 
-function placementLogic(dt)
-	if not toolDown then
-		currentPlacementTime = 0
+function server.placementLogic(dt, playerId)
+	local currInputState = playerInputStates[playerId]
+	
+	if not currInputState.toolDown then
+		currInputState.currentPlacementTime = 0
 		return
 	end
 	
-	if not placingBeacon then
+	if not currInputState.placingBeacon then
 		return
 	end
 	
-	currentPlacementTime = currentPlacementTime + dt
+	currInputState.currentPlacementTime = currInputState.currentPlacementTime + dt
 	
-	if currentPlacementTime >= placementTimer then
-		placingBeacon = false
-		currentPlacementTime = 0
+	if currInputState.currentPlacementTime >= currInputState.placementTimer then
+		currInputState.placingBeacon = false
+		currInputState.currentPlacementTime = 0
 		
 		local beaconTransform = nil
 		
-		if rtsCameraActive then
+		--[[if currInputState.rtsCameraActive then
 			local cameraTransform = GetCameraTransform()
 			
 			local forwardPos = TransformToParentPoint(cameraTransform, Vec(0, 0, -2))
@@ -193,25 +249,25 @@ function placementLogic(dt)
 				return
 			end
 		else
-			beaconTransform = GetPlayerTransform()
-		end
-	
-		local static = not InputDown("rmb")
-	
-		local newBeacon = createBeacon(beaconTransform, static)
+			beaconTransform = GetPlayerTransform(playerId)
+		end]]--
 		
-		activeBeacons[currBeaconIndex] = newBeacon
+		beaconTransform = GetPlayerTransform(playerId)
+	
+		local static = not InputDown("rmb", playerId)
+	
+		local newBeacon = server.createBeacon(beaconTransform, static)
 		
-		currBeaconIndex = (currBeaconIndex % maxActiveBeacons) + 1
+		activeBeacons[playerId] = newBeacon
+		
+		--currBeaconIndex = (currBeaconIndex % maxActiveBeacons) + 1
 	end
 end
 
 -- Object handlers
 
-function allBeaconsHandler(dt)
-	for i = 1, #activeBeacons do
-		local currentBeacon = activeBeacons[i]
-		
+function server.allBeaconsHandler(dt)
+	for playerId, currentBeacon in pairs(activeBeacons) do
 		if currentBeacon ~= nil and currentBeacon.active == true then
 			if IsBodyBroken(currentBeacon.bodyId) or IsShapeBroken(currentBeacon.bodyId) then
 				currentBeacon.playDisarmSound = true
@@ -219,42 +275,58 @@ function allBeaconsHandler(dt)
 			else
 				--drawBeaconSprite(currentBeacon)
 	
-				drawBeaconAnim(dt, currentBeacon)
+				ClientCall(0, "client.drawBeaconAnim", dt, currentBeacon)
 				
 				if not currentBeacon.static then
 					currentBeacon.transform = GetBodyTransform(currentBeacon.bodyId)
 				end
 				
 				if beaconTimerLogic(dt, currentBeacon) then
-					explodeBeacon(currentBeacon)
+					server.explodeBeacon(currentBeacon)
 					currentBeacon.active = false
 				end
 				
-				beaconSoundHandler(dt, currentBeacon)
+				currentBeacon.beepTimer = currentBeacon.beepTimer + dt
+				
+				ClientCall(0, "client.beaconSoundHandler", dt, currentBeacon)
+				
+				server.evaSoundHandler(dt, currentBeacon)
+				
+				if currentBeacon.beepTimer > 1 then
+					currentBeacon.beepTimer = 0
+					--PlaySound(beepSound, beacon.transform.pos, effectVolume)
+				end
+				
+				if currentBeacon.timer <= 11 and currentBeacon.warmupSndTriggered == false then
+					currentBeacon.warmupSndTriggered = true
+					--PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
+				end
 			end
 		end
 	end
 end
 
-function allWavesHandler(dt)
+function server.allWavesHandler(dt)
 	for i = 1, #activeWaves do
 		local currWave = activeWaves[i]
 		
 		if currWave ~= nil and currWave.active == true then
-			if explosionWaveHandler(dt, currWave) then
+			if server.explosionWaveHandler(dt, currWave) then
 				currWave.active = false
 			end
 		end
 	end
 end
 
-function allEvaHander(dt)
-	for i = 1, #activeBeacons do
-		local currentBeacon = activeBeacons[i]
-		
+function client.allEvaHander(activeBeacons, dt)
+	if evaVolume <= 0 then
+		return
+	end
+	
+	for playerId, currentBeacon in pairs(activeBeacons) do
 		if currentBeacon ~= nil then
 			if currentBeacon.active == true then
-				evaSoundHandler(dt, currentBeacon)
+				client.evaSoundHandler(dt, currentBeacon)
 			elseif currentBeacon.playDisarmSound then
 				currentBeacon.playDisarmSound = false
 				UiSound(evaDisarmedSound, evaVolume)
@@ -295,16 +367,16 @@ end
 
 -- Potential TODO: Find all broken objects in the area and
 --                 launch them from the center.
--- Another TODO: Less lagg mode, remove small pieces of debris.
+-- Another TODO: Less lag mode, remove small pieces of debris.
 --               (If total debris count is large.)
-function explodeBeacon(beacon)
+function server.explodeBeacon(beacon)
 	if beacon == nil or beacon.active == false then
 		return
 	end
 	
-	PlaySound(fireSound, beacon.transform.pos, effectVolume * 10)
+	--PlaySound(fireSound, beacon.transform.pos, effectVolume)-- * 10)
 	
-	local newWave = createExplosionWave(beacon.transform)
+	local newWave = server.createExplosionWave(beacon.transform)
 	
 	activeWaves[currWaveIndex] = newWave
 		
@@ -334,7 +406,7 @@ end
 -- UI Functions (excludes sound specific functions)
 
 function drawUI(dt)
-	if not placingBeacon then
+	if not clientInputStates.placingBeacon then
 		return
 	end
 	
@@ -349,7 +421,7 @@ function drawUI(dt)
 			
 			UiAlign("left middle")
 			
-			UiRect(200 / placementTimer * currentPlacementTime, 30)
+			UiRect(200 / clientInputStates.placementTimer * clientInputStates.currentPlacementTime, 30)
 		UiPop()
 		
 		UiPush()
@@ -373,7 +445,7 @@ end
 
 -- Creation Functions
 
-function createBeacon(transform, static)
+function server.createBeacon(transform, static)
 	local currentBeacon = deepcopy(beaconClass)
 	
 	currentBeacon.active = true
@@ -388,12 +460,12 @@ function createBeacon(transform, static)
 	
 	currentBeacon.static = static
 	
-	generateBeaconStreaks(currentBeacon)
+	server.generateBeaconStreaks(currentBeacon)
 	
 	return currentBeacon
 end
 
-function createExplosionWave(transform)
+function server.createExplosionWave(transform)
 	local transformCopy = TransformCopy(transform)
 	
 	local wave = deepcopy(explosionWaveClass)
@@ -405,7 +477,7 @@ function createExplosionWave(transform)
 	return wave
 end
 
-function generateBeaconStreaks(beacon)
+function server.generateBeaconStreaks(beacon)
 	local beaconPos = beacon.transform.pos
 
 	for i = 1, 15 do
@@ -429,28 +501,24 @@ end
 
 -- World Sound functions
 
-function beaconSoundHandler(dt, beacon)
+function client.beaconSoundHandler(dt, beacon)
 	if beacon == nil then
 		return
 	end
 	
-	beacon.beepTimer = beacon.beepTimer + dt
-	
 	if beacon.beepTimer > 1 then
-		beacon.beepTimer = 0
 		PlaySound(beepSound, beacon.transform.pos, effectVolume)
 	end
 	
 	if beacon.timer <= 11 and beacon.warmupSndTriggered == false then
-		beacon.warmupSndTriggered = true
-		PlaySound(warmupSound, beacon.transform.pos, effectVolume * 10)
+		PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
 	end
 end
 
 -- Sprite functions
 
-function drawRTSPlacementSprite()
-	if not rtsCameraActive or GetString("game.player.tool") ~= "ioncannonbeacon" then
+function client.drawRTSPlacementSprite()
+	if not rtsCameraActive or GetPlayerTool(0) ~= "ioncannonbeacon" then
 		return
 	end
 	
@@ -471,7 +539,7 @@ function drawRTSPlacementSprite()
 	DrawSprite(circleSprite, Transform(hitPoint, spriteRot), spriteCircleSize / 10, spriteCircleSize / 10, 1, 1, 0, 1, false, false)
 end
 
-function drawBeaconAnim(dt, beacon)
+function client.drawBeaconAnim(dt, beacon)
 	if beacon == nil then
 		return
 	end
@@ -490,7 +558,7 @@ function drawBeaconAnim(dt, beacon)
 		
 		for circle = 0, 10 do
 			local currPos = Vec(beaconPos[1], beaconPos[2] + circle * 100 + circleOffset, beaconPos[3])
-			local currRot = QuatLookAt(currPos, beaconPos)
+			local currRot = QuatLookAt(currPos, VecAdd(currPos, Vec(0, 1, 0)))
 			
 			local currTransform = Transform(currPos, currRot)
 			
@@ -602,7 +670,19 @@ function drawBeaconSprite(beacon)
 	end
 end
 
-function explosionWaveHandler(dt, wave)
+function client.explosionWaveHandler(dt, wave, waveSize)
+	local cameraTransform = GetCameraTransform()
+	
+	local lookRot = QuatLookAt(wave.transform.pos, cameraTransform.pos)
+	
+	local currTransform = Transform(wave.transform.pos, lookRot)
+	
+	local alpha = 1 - 100 / wave.maxLifetime * wave.lifetime / 100
+	
+	DrawSprite(sphereSprite, currTransform, waveSize, waveSize, 0, 0, 1, alpha, true, false)
+end
+
+function server.explosionWaveHandler(dt, wave)
 	if wave == nil then
 		return true
 	end
@@ -615,22 +695,29 @@ function explosionWaveHandler(dt, wave)
 	
 	local waveSize = wave.maxSize / wave.maxLifetime * wave.lifetime 
 	
-	local cameraTransform = GetCameraTransform()
-	
-	local lookRot = QuatLookAt(wave.transform.pos, cameraTransform.pos)
-	
-	local currTransform = Transform(wave.transform.pos, lookRot)
-	
-	local alpha = 1 - 100 / wave.maxLifetime * wave.lifetime / 100
-	
-	DrawSprite(sphereSprite, currTransform, waveSize, waveSize, 0, 0, 1, alpha, true, false)
+	ClientCall(0, "client.explosionWaveHandler", dt, wave, waveSize)
 	
 	return false
 end
 
 -- UI Sound Functions
 
-function evaSoundHandler(dt, beacon)
+local evaQueue = {}
+
+function client.queueEvaSound(snd)
+	DebugPrint(snd)
+	evaQueue[#evaQueue + 1] = snd
+end
+
+function client.evaSoundHandler()
+	for i = 1, #evaQueue do
+		UiSound(evaQueue[i], evaVolume)
+	end
+	
+	evaQueue = {}
+end
+
+function server.evaSoundHandler(dt, beacon)
 	-- Most certainly could've made this cleaner.
 	-- But it works, for now.
 	if beacon == nil then
@@ -641,31 +728,37 @@ function evaSoundHandler(dt, beacon)
 		beacon.evaTicker = beacon.evaTicker + dt
 	elseif beacon.evaTicker <= 0 then
 		beacon.evaTicker = 1
-		UiSound(evaBeaconDeployedSound, evaVolume)
+		--UiSound(evaBeaconDeployedSound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaBeaconDeployedSound)
 	end
 	
 	if beacon.evaTicker >= 4 and beacon.evaTicker < 5 then
 		beacon.evaTicker = 5
-		UiSound(evaSatelliteApproachingSound, evaVolume)
+		--UiSound(evaSatelliteApproachingSound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaSatelliteApproachingSound)
 	end
 	
 	if beacon.evaTicker >= 8.5 and beacon.evaTicker < 9 then
 		beacon.evaTicker = 9
-		UiSound(evaYouHaveSound, evaVolume)
+		--UiSound(evaYouHaveSound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaYouHaveSound)
 	end
 	
 	if beacon.evaTicker >= 10 and beacon.evaTicker < 11 then
 		beacon.evaTicker = 11
 		if quickTrigger then
-			UiSound(evaCount10Sound, evaVolume)
+			--UiSound(evaCount10Sound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaCount10Sound)
 		else
-			UiSound(evaCount20Sound, evaVolume)
+			--UiSound(evaCount20Sound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaCount20Sound)
 		end
 	end
 	
 	if beacon.evaTicker >= 11.5 and beacon.evaTicker < 12 then
 		beacon.evaTicker = 12
-		UiSound(evaSecondsToSound, evaVolume)
+		--UiSound(evaSecondsToSound, evaVolume)
+		ClientCall(0, "client.queueEvaSound", evaSecondsToSound)
 	end
 	
 	if beacon.evaTicker <= 23 then
@@ -674,73 +767,91 @@ function evaSoundHandler(dt, beacon)
 		if quickTrigger and beacon.evaTicker == 12 then
 			beacon.evaTicker = 18
 		elseif bTimer == 15 and beacon.evaTicker == 12 then
-			UiSound(evaCount15Sound, evaVolume)
+			--UiSound(evaCount15Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount15Sound)
 			beacon.evaTicker = 13
 		end
 		
 		if bTimer == 10 and beacon.evaTicker == 13 then
-			UiSound(evaCount10Sound, evaVolume)
+			--UiSound(evaCount10Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount10Sound)
 			beacon.evaTicker = 14
 		end
 		
 		if bTimer == 9 and beacon.evaTicker == 14 then
-			UiSound(evaCount09Sound, evaVolume)
+			--UiSound(evaCount09Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount09Sound)
 			beacon.evaTicker = 15
 		end
 		
 		if bTimer == 8 and beacon.evaTicker == 15 then
-			UiSound(evaCount08Sound, evaVolume)
+			--UiSound(evaCount08Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount08Sound)
 			beacon.evaTicker = 16
 		end
 		
 		if bTimer == 7 and beacon.evaTicker == 16 then
-			UiSound(evaCount07Sound, evaVolume)
+			--UiSound(evaCount07Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount07Sound)
 			beacon.evaTicker = 17
 		end
 		
 		if bTimer == 6 and beacon.evaTicker == 17 then
-			UiSound(evaCount06Sound, evaVolume)
+			--UiSound(evaCount06Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount06Sound)
 			beacon.evaTicker = 18
 		end
 		
 		if bTimer == 5 and beacon.evaTicker == 18 then
-			UiSound(evaCount05Sound, evaVolume)
+			--UiSound(evaCount05Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount05Sound)
 			beacon.evaTicker = 19
 		end
 		
 		if bTimer == 4 and beacon.evaTicker == 19 then
-			UiSound(evaCount04Sound, evaVolume)
+			--UiSound(evaCount04Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount04Sound)
 			beacon.evaTicker = 20
 		end
 		
 		if bTimer == 3 and beacon.evaTicker == 20 then
-			UiSound(evaCount03Sound, evaVolume)
+			--UiSound(evaCount03Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount03Sound)
 			beacon.evaTicker = 21
 		end
 		
 		if bTimer == 2 and beacon.evaTicker == 21 then
-			UiSound(evaCount02Sound, evaVolume)
+			--UiSound(evaCount02Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount02Sound)
 			beacon.evaTicker = 22
 		end
 		
 		if bTimer == 1 and beacon.evaTicker == 22 then
-			UiSound(evaCount01Sound, evaVolume)
+			--UiSound(evaCount01Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount01Sound)
 			beacon.evaTicker = 23
 		end
 		
 		if bTimer == 0 and beacon.evaTicker == 23 then
-			UiSound(evaCount00Sound, evaVolume)
+			--UiSound(evaCount00Sound, evaVolume)
+			ClientCall(0, "client.queueEvaSound", evaCount00Sound)
 			beacon.evaTicker = 24
 		end
 	end
 end
 
-function beaconPlacementSoundHandler()
-	if not placingBeacon or not startedPlacing then
+function server.clientPlacedBeacon(playerId)
+	playerInputStates[playerId].startedPlacing = false
+end
+
+function client.beaconPlacementSoundHandler()
+	if not clientInputStates.placingBeacon or not clientInputStates.startedPlacing then
 		return
 	end
 	
-	startedPlacing = false
+	clientInputStates.startedPlacing = false
 	
-	UiSound(placingBeaconSound, effectVolume)
+	ServerCall("server.clientPlacedBeacon", GetLocalPlayer())
+	
+	UiSound(placingBeaconSound, 1)
 end

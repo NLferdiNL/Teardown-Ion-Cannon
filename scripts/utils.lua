@@ -1,3 +1,5 @@
+#version = 2
+
 function tableToText(inputTable, loopThroughTables, useIPairs, addIndex, addNewLine)
 	loopThroughTables = loopThroughTables or true
 	useIPairs = useIPairs or false

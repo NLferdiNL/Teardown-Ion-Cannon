@@ -1,3 +1,4 @@
+#version = 2
 #include "datascripts/color4.lua"
 
 function c_UiColor(color4)

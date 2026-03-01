@@ -1,3 +1,4 @@
+#version = 2
 moddataPrefix = "savegame.mod.IonCannonBeacon"
 
 function saveFileInit()
