@@ -131,7 +131,7 @@ function server.tick(dt)
 	end]]--
 	
 	for id in PlayersAdded() do
-		SetToolEnabled(true, id)
+		SetToolEnabled("ioncannonbeacon", true, id)
 		playerInputStates[id] = {placeSound = nil, toolDown = false, placingBeacon = false, rtsCameraActive = false, placementTimer = 3, currentPlacementTime = 0, placingPlayerPos = Vec()}
 	end
 	
@@ -149,10 +149,6 @@ function server.tick(dt)
 	server.allBeaconsHandler(dt)
 	
 	server.allWavesHandler(dt)
-end
-
-function client.tick()
-	client.drawRTSPlacementSprite()
 end
 
 function client.getBeacons(beacons)
@@ -740,6 +736,8 @@ function client.evaSoundHandler()
 end
 
 function client.tick(dt)
+	client.drawRTSPlacementSprite()
+	
 	for id in Players() do
 		client.positionTool(id)
 	end
