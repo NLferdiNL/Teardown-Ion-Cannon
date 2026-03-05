@@ -19,6 +19,7 @@ local beaconClass = {
 	bodyId = 0,
 	playDisarmSound = false,
 	static = true,
+	beaconSound = nil,
 }
 
 local playerInputStates = {}
@@ -45,9 +46,6 @@ local grabDown = false]]--
 --local placementTimer = 3
 --local currentPlacementTime = 0
 
---TODO MP: Fix centering streaks
---TODO MP: Fix beacon circles flickering due to lifetime
-
 local beaconSprite = nil
 local circleSprite = nil
 local sphereSprite = nil
@@ -56,6 +54,7 @@ local lineSprite = nil
 local beepSound = nil
 local warmupSound = nil
 local fireSound = nil
+local placingBeaconSound = nil
 
 local spriteCircleSize = 75
 
@@ -78,8 +77,6 @@ local evaCount01Sound =  "snd/eva_1.ogg"
 local evaCount00Sound =  "snd/eva_0.ogg"
 local evaSecondsToSound =  "snd/eva_seconds_to_reach_minimum_safe_distance.ogg"
 local evaDisarmedSound = "snd/beacon_disarmed.ogg"
-
-local placingBeaconSound = "snd/ion_beacon_set.ogg"
 
 --local placingPlayerPos = nil
 
@@ -110,6 +107,11 @@ function server.init()
 	
 	RegisterTool("ioncannonbeacon", "Ion Cannon Beacon", "MOD/vox/beacon.vox", 4)
 	SetBool("game.tool.ioncannonbeacon.enabled", true)
+	
+	beepSound = LoadSound("snd/com_ion_beep.ogg")
+	warmupSound = LoadSound("snd/ion_warmup.ogg")
+	fireSound = LoadSound("snd/ion_fire.ogg")
+	placingBeaconSound = LoadSound("snd/ion_beacon_set.ogg")
 end
 
 function client.init()
@@ -117,10 +119,6 @@ function client.init()
 	circleSprite = LoadSprite("sprites/circle.png")
 	sphereSprite = LoadSprite("sprites/sphere.png")
 	lineSprite = LoadSprite("sprites/line.png")
-	
-	beepSound = LoadSound("snd/com_ion_beep.ogg")
-	warmupSound = LoadSound("snd/ion_warmup.ogg")
-	fireSound = LoadSound("snd/ion_fire.ogg")
 end
 
 function server.tick(dt)
@@ -134,7 +132,7 @@ function server.tick(dt)
 	
 	for id in PlayersAdded() do
 		SetToolEnabled(true, id)
-		playerInputStates[id] = {toolDown = false, placingBeacon = false, rtsCameraActive = false, placementTimer = 3, currentPlacementTime = 0, placingPlayerPos = Vec()}
+		playerInputStates[id] = {placeSound = nil, toolDown = false, placingBeacon = false, rtsCameraActive = false, placementTimer = 3, currentPlacementTime = 0, placingPlayerPos = Vec()}
 	end
 	
 	for id in PlayersRemoved() do
@@ -170,7 +168,7 @@ function client.draw(dt)
 	
 	client.evaSoundHandler()
 	
-	client.beaconPlacementSoundHandler()
+	--client.beaconPlacementSoundHandler()
 
 	--[[if evaVolume > 0 then
 		client.allEvaHander(dt)
@@ -190,7 +188,8 @@ function server.toolLogic(dt, playerId)
 		
 		if not currInputState.toolDown then
 			currInputState.placingBeacon = true
-			currInputState.startedPlacing = true
+			DebugPrint(placingBeaconSound)
+			currInputState.placingSound = PlaySound(placingBeaconSound, playerTransform.pos, 1)
 			if currInputState.rtsCameraActive then
 				currInputState.placementTimer = 1
 			else
@@ -210,7 +209,11 @@ function server.toolLogic(dt, playerId)
 	else
 		currInputState.toolDown = false
 		currInputState.placingBeacon = false
-		currInputState.startedPlacing = false
+		
+		if currInputState.placingSound ~= nil then
+			StopSound(currInputState.placingSound)
+			currInputState.placingSound = nil
+		end
 	end
 end
 
@@ -271,7 +274,9 @@ function server.allBeaconsHandler(dt)
 		if currentBeacon ~= nil and currentBeacon.active == true then
 			if IsBodyBroken(currentBeacon.bodyId) or IsShapeBroken(currentBeacon.bodyId) then
 				currentBeacon.playDisarmSound = true
+				ClientCall(0, "client.queueEvaSound", evaDisarmedSound)
 				currentBeacon.active = false
+				StopSound(currentBeacon.beaconSound)
 			else
 				--drawBeaconSprite(currentBeacon)
 	
@@ -513,7 +518,7 @@ function client.beaconSoundHandler(dt, beacon)
 	end
 	
 	if beacon.timer <= 11 and beacon.warmupSndTriggered == false then
-		PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
+		beacon.beaconSound = PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
 	end
 end
 
@@ -732,6 +737,36 @@ function client.evaSoundHandler()
 	end
 	
 	evaQueue = {}
+end
+
+function client.tick(dt)
+	for id in Players() do
+		client.positionTool(id)
+	end
+end
+
+function client.positionTool(id)
+	if GetPlayerTool(id) ~= "ioncannonbeacon" then
+		return
+	end
+	
+	local toolRot = QuatEuler(20, 0, 0)
+	local gunpos = Vec(0, -0.4, -0.4)
+	
+	if IsPlayerLocal(id) and not GetBool('game.thirdperson') then
+		gunpos = Vec(0, -0.4, -0.5)
+		toolRot = QuatEuler(20, 0, 0)
+	elseif (IsPlayerLocal(id) and GetBool('game.thirdperson')) or not IsPlayerLocal(id) then
+		local rightHand = Transform(Vec(.075,-.05,-.15), QuatEuler(0, 135, 0))
+		local leftHand = Transform(Vec(-.075,-.05,-.15), QuatEuler(0, 45, 0))
+		SetToolHandPoseLocalTransform(rightHand, leftHand, id)
+		--SetToolHandPoseLocalTransform(Transform(Vec(0.2, -0.3, -0.3)), nil, id)
+	end
+	
+	
+	--SetToolOffset(gunpos, 1, id)
+	SetToolTransform(Transform(gunpos, toolRot), 1, id)
+	--SetToolHandPoseLocalTransform(Transform(Vec(0.1,0,-.4), QuatAxisAngle(Vec(0,1,0), 90.0)), nil)
 end
 
 function server.evaSoundHandler(dt, beacon)
