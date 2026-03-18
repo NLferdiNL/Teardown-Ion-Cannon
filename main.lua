@@ -24,7 +24,8 @@ local beaconClass = {
 
 local playerInputStates = {}
 
-local maxActiveBeaconsPerPlayer = 1
+local maxActiveBeacons = 20
+local nextBeaconId = 1
 local activeBeacons = {}
 
 local explosionWaveClass = {
@@ -119,6 +120,11 @@ function client.init()
 	circleSprite = LoadSprite("sprites/circle.png")
 	sphereSprite = LoadSprite("sprites/sphere.png")
 	lineSprite = LoadSprite("sprites/line.png")
+	
+	beepSound = LoadSound("snd/com_ion_beep.ogg")
+	warmupSound = LoadSound("snd/ion_warmup.ogg")
+	fireSound = LoadSound("snd/ion_fire.ogg")
+	placingBeaconSound = LoadSound("snd/ion_beacon_set.ogg")
 end
 
 function server.tick(dt)
@@ -184,7 +190,7 @@ function server.toolLogic(dt, playerId)
 		
 		if not currInputState.toolDown then
 			currInputState.placingBeacon = true
-			DebugPrint(placingBeaconSound)
+			
 			currInputState.placingSound = PlaySound(placingBeaconSound, playerTransform.pos, 1)
 			if currInputState.rtsCameraActive then
 				currInputState.placementTimer = 1
@@ -211,6 +217,10 @@ function server.toolLogic(dt, playerId)
 			currInputState.placingSound = nil
 		end
 	end
+end
+
+function client.setupBeaconAudioData(bId)
+	activeBeacons[bId] = nil
 end
 
 function server.placementLogic(dt, playerId)
@@ -257,7 +267,11 @@ function server.placementLogic(dt, playerId)
 	
 		local newBeacon = server.createBeacon(beaconTransform, static)
 		
-		activeBeacons[playerId] = newBeacon
+		activeBeacons[nextBeaconId] = newBeacon
+		
+		ClientCall("client.setupBeaconAudioData", nextBeaconId)
+		
+		nextBeaconId = nextBeaconId % maxActiveBeacons + 1
 		
 		--currBeaconIndex = (currBeaconIndex % maxActiveBeacons) + 1
 	end
@@ -265,14 +279,18 @@ end
 
 -- Object handlers
 
+function client.stopBeacon(bId)
+	StopSound(activeBeacons[bId])
+end
+
 function server.allBeaconsHandler(dt)
-	for playerId, currentBeacon in pairs(activeBeacons) do
+	for beaconId, currentBeacon in pairs(activeBeacons) do
 		if currentBeacon ~= nil and currentBeacon.active == true then
 			if IsBodyBroken(currentBeacon.bodyId) or IsShapeBroken(currentBeacon.bodyId) then
 				currentBeacon.playDisarmSound = true
 				ClientCall(0, "client.queueEvaSound", evaDisarmedSound)
+				ClientCall(0, "client.stopBeacon", beaconId)
 				currentBeacon.active = false
-				StopSound(currentBeacon.beaconSound)
 			else
 				--drawBeaconSprite(currentBeacon)
 	
@@ -289,7 +307,7 @@ function server.allBeaconsHandler(dt)
 				
 				currentBeacon.beepTimer = currentBeacon.beepTimer + dt
 				
-				ClientCall(0, "client.beaconSoundHandler", dt, currentBeacon)
+				ClientCall(0, "client.beaconSoundHandler", dt, currentBeacon, beaconId)
 				
 				server.evaSoundHandler(dt, currentBeacon)
 				
@@ -300,7 +318,7 @@ function server.allBeaconsHandler(dt)
 				
 				if currentBeacon.timer <= 11 and currentBeacon.warmupSndTriggered == false then
 					currentBeacon.warmupSndTriggered = true
-					--PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
+					--currentBeacon.beaconSound = PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
 				end
 				
 				server.calculateStreaks(dt, currentBeacon)
@@ -504,7 +522,7 @@ end
 
 -- World Sound functions
 
-function client.beaconSoundHandler(dt, beacon)
+function client.beaconSoundHandler(dt, beacon, bId)
 	if beacon == nil then
 		return
 	end
@@ -514,7 +532,7 @@ function client.beaconSoundHandler(dt, beacon)
 	end
 	
 	if beacon.timer <= 11 and beacon.warmupSndTriggered == false then
-		beacon.beaconSound = PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
+		activeBeacons[bId] = PlaySound(warmupSound, beacon.transform.pos, effectVolume)-- * 10)
 	end
 end
 
@@ -598,10 +616,6 @@ function server.calculateStreaks(dt, beacon)
 				local green = math.random(75, 100) / 100
 				
 				local blue = 1
-				
-				if i == 1 then
-					DebugPrint(spriteTransform)
-				end
 				
 				if distToBeacon >= 2 or bTimer > 1.5 then
 					ClientCall(0, "client.drawStreak", spriteTransform, 3, 400, 0, 0.75, 1, alpha, true, false)
@@ -743,6 +757,12 @@ function client.tick(dt)
 	end
 end
 
+local playerOffsets = {}
+
+local randXLimit = 0.1
+local randYLimit = 0.025
+local randZLimit = 0.05
+
 function client.positionTool(id)
 	if GetPlayerTool(id) ~= "ioncannonbeacon" then
 		return
@@ -750,17 +770,66 @@ function client.positionTool(id)
 	
 	local toolRot = QuatEuler(20, 0, 0)
 	local gunpos = Vec(0, -0.4, -0.4)
+	local settingBeacon = InputDown("usetool", id) or InputDown("grab", id)
 	
-	if IsPlayerLocal(id) and not GetBool('game.thirdperson') then
-		gunpos = Vec(0, -0.4, -0.5)
-		toolRot = QuatEuler(20, 0, 0)
-	elseif (IsPlayerLocal(id) and GetBool('game.thirdperson')) or not IsPlayerLocal(id) then
-		local rightHand = Transform(Vec(.075,-.05,-.15), QuatEuler(0, 135, 0))
-		local leftHand = Transform(Vec(-.075,-.05,-.15), QuatEuler(0, 45, 0))
-		SetToolHandPoseLocalTransform(rightHand, leftHand, id)
-		--SetToolHandPoseLocalTransform(Transform(Vec(0.2, -0.3, -0.3)), nil, id)
+	if not settingBeacon then
+		if IsPlayerLocal(id) and not GetBool('game.thirdperson') then
+			gunpos = Vec(0, -0.4, -0.5)
+			toolRot = QuatEuler(20, 0, 0)
+		elseif (IsPlayerLocal(id) and GetBool('game.thirdperson')) or not IsPlayerLocal(id) then
+			local rightHand = Transform(Vec(.075,-.05,-.15), QuatEuler(0, 135, 0))
+			local leftHand = Transform(Vec(-.075,-.05,-.15), QuatEuler(0, 45, 0))
+			SetToolHandPoseLocalTransform(rightHand, leftHand, id)
+			--SetToolHandPoseLocalTransform(Transform(Vec(0.2, -0.3, -0.3)), nil, id)
+		end
+	else
+		if IsPlayerLocal(id) and not GetBool('game.thirdperson') then
+			gunpos = Vec(0, -0.4, -0.5)
+			toolRot = QuatEuler(20, 0, 0)
+		elseif (IsPlayerLocal(id) and GetBool('game.thirdperson')) or not IsPlayerLocal(id) then
+			toolRot = QuatEuler(0, 0, 0)
+			local lastVec = playerOffsets[id]
+			
+			if lastVec == nil then
+				local randomOffsetX = (math.random() * (randXLimit * 2) - randXLimit)
+				local randomOffsetY = (math.random() * (randYLimit * 2) - randYLimit)
+				local randomOffsetZ = (math.random() * (randZLimit * 2) - randZLimit)
+				playerOffsets[id] = Vec(randomOffsetX, randomOffsetY, randomOffsetZ)
+				lastVec = playerOffsets[id]
+			end
+			
+			local randomOffsetX = (math.random() * (randXLimit * 2) - randXLimit) / 2
+				local randomOffsetY = (math.random() * (randYLimit * 2) - randYLimit) / 2
+				local randomOffsetZ = (math.random() * (randZLimit * 2) - randZLimit) / 2
+			
+			lastVec[1] = lastVec[1] + randomOffsetX
+			lastVec[2] = lastVec[2] + randomOffsetY
+			lastVec[3] = lastVec[3] + randomOffsetZ
+			
+			if lastVec[1] < -randXLimit then
+				lastVec[1] = -randXLimit
+			elseif lastVec[1] > randXLimit then
+				lastVec[1] = randXLimit
+			end
+			
+			if lastVec[2] < -randYLimit then
+				lastVec[2] = -randYLimit
+			elseif lastVec[2] > randYLimit then
+				lastVec[2] = randYLimit
+			end
+			
+			if lastVec[3] < -randZLimit then
+				lastVec[3] = -randZLimit
+			elseif lastVec[3] > randZLimit then
+				lastVec[3] = randZLimit
+			end
+			
+			local rightHand = Transform(VecAdd(Vec(-.05,0.0,.1), lastVec), QuatEuler(-90, 0, 0))
+			local leftHand = Transform(Vec(-.05,-.05,-.2), QuatEuler(0, 30, 0))
+			SetToolHandPoseLocalTransform(rightHand, leftHand, id)
+			--SetToolHandPoseLocalTransform(Transform(Vec(0.2, -0.3, -0.3)), nil, id)
+		end
 	end
-	
 	
 	--SetToolOffset(gunpos, 1, id)
 	SetToolTransform(Transform(gunpos, toolRot), 1, id)

@@ -3,3 +3,4 @@ author = NLferdiNL
 description = [noupload]Ion Cannon Beacon from CnC Renegade
 tags = Tool
 version = 2
+preview_image = preview.jpg
